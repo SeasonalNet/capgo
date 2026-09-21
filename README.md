@@ -24,6 +24,10 @@ go get git.seasonalnet.org/SeasonalNet/capgo
 
 The module path is ready for that repository location; change `module` in `go.mod` before publishing elsewhere.
 
+## Development
+
+The repository targets Go 1.26.5, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
+
 ## Decode and validate
 
 ```go
