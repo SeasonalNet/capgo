@@ -2,7 +2,8 @@
 
 `capgo` is a dependency-free Go library for the XML representation of OASIS Common Alerting Protocol (CAP) version 1.2. It includes composable validators for the Canadian CAP Profile (CAP-CP), the IPAWS CAP profile, and the National Weather Service CAP producer profile.
 
-The primary repository is [SeasonalForge](https://git.seasonalnet.org/SeasonalNet/capgo). The [SeasonalNet GitHub repository](https://github.com/SeasonalNet/capgo) is a mirror.
+- The primary repository is [on SeasonalForge](https://git.seasonalnet.org/SeasonalNet/capgo).
+- The repository [on GitHub](https://github.com/SeasonalNet/capgo) is a mirror.
 
 ## What is included
 
@@ -111,6 +112,9 @@ each `info` block, and structured validation issues. A message with
 error-level findings still produces JSON and exits non-zero; diagnostics are
 also written to standard error. The `examples/validate` command remains as a
 compatibility wrapper around the same application.
+
+See [docs/examples](docs/examples/README.md) for native Go usage and Python,
+Node.js, Java, C++, Rust, C#/.NET, and shell integrations.
 
 ## Standards target
 
