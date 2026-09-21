@@ -25,9 +25,11 @@ Recommended note content for `Exercise`, `Test`, and `Error` messages is reporte
 
 ## CAP-CP Beta 0.4A
 
-The `capcp` validator maps its rule IDs directly to rules 2-18 in the published rule set. It enforces the profile marker, a single subject event, explicit languages, event/location reference forms, area/geocode requirements, reference presence, and the `MinorChange` and `AutoTranslated` layers. Recommendations for expiry, sender name, and response type are warnings.
+The comparison target is the published [CAP-CP Introduction and Rule Set Beta 0.4A](https://www.publicsafety.gc.ca/cnt/rsrcs/pblctns/capcp-ntro-rl-st/Beta-04a-en.pdf).
 
-Event References and Location References are independently versioned managed lists. Their complete contents are not frozen in this module. Callers can inject the governed revision through `capcp.Validator.EventCodes` and `LocationCodes`. `ValidateActiveReferences` checks rule 12 when candidate prior messages are available.
+The `capcp` validator maps its rule IDs directly to rules 2-18 in the published rule set. It enforces the profile marker, public-distribution info cardinality, a single subject event, explicit languages, event/location reference forms, area/geocode requirements, reference presence, and the `MinorChange` and `AutoTranslated` layers (including the one-marker-per-info constraint). Recommendations for expiry, sender name, response type, and polygon/circle geometry are warnings. Private COG-to-COG messages may omit `info` as permitted by CAP-CP.
+
+Event References and Location References are independently versioned managed lists. Their complete contents are not frozen in this module. Callers can inject the governed revision through `capcp.Validator.EventCodes` and `LocationCodes`. `ValidateActiveReferences` checks rule 12 for Update and Cancel messages when candidate prior messages are available.
 
 ## IPAWS 1.0
 
@@ -41,8 +43,12 @@ IPAWS-OPEN SOAP/WSDL transport, COG authorization, X.509 trust policy, and XML-s
 
 ## NWS CAP v1.2
 
-The `nws` validator includes unconditional IPAWS validation, then checks the NWS producer formats for message identity, sender, public scope, info content, the current [NWR-SAME event-code catalog](https://www.weather.gov/dsb/eventcodes) and [FCC 47 CFR 11.31 event codes](https://www.govinfo.gov/content/pkg/CFR-2024-title47-vol1/pdf/CFR-2024-title47-vol1-sec11-31.pdf), `NationalWeatherService` event codes, effective/onset/expiry behavior, office/text/web fields, EAS originator, channel blocking, SAME and UGC geography, and the documented NWS parameters. NWS identifiers are treated as opaque CAP identifiers, including API URNs.
+The comparison target is the [NWS CAP v1.2 producer guide](https://www.weather.gov/media/alert/CAP_v12_guide_05-16-2017.pdf), supplemented by the current [NWR-SAME event-code catalog](https://www.weather.gov/dsb/eventcodes).
+
+The `nws` validator includes unconditional IPAWS validation, then checks the NWS producer formats for message identity, sender, public scope, required info and area blocks, the current [NWR-SAME event-code catalog](https://www.weather.gov/dsb/eventcodes) and [FCC 47 CFR 11.31 event codes](https://www.govinfo.gov/content/pkg/CFR-2024-title47-vol1/pdf/CFR-2024-title47-vol1-sec11-31.pdf), `NationalWeatherService` event codes, effective/onset/expiry behavior, office/text/web fields, EAS originator, channel blocking, SAME and UGC geography, and the documented NWS parameters. NWS identifiers are treated as opaque CAP identifiers, including API URNs.
 
 The production feed emits `EAS-ORG=WXR` for NWS `NationalWeatherService` event codes whose final significance character is watch (`A`) or warning (`W`) and can activate EAS. It omits that parameter for recognized non-EAS significances such as advisory (`Y`) and statement (`S`) products. The validator uses this CAP event-code representation rather than depending on the optional VTEC parameter, which NWS is considering discontinuing.
 
 NWS `Cancel` is not treated as synonymous with an ordinary VTEC cancellation. The validator checks serialization/profile rules; downstream lifecycle interpretation remains the caller's responsibility.
+
+`nws.ValidateActiveReferences` checks that an NWS Update or Cancel references every active related message supplied by the caller. As with CAP-CP and IPAWS, this history-aware check is separate from single-message validation.

@@ -49,6 +49,35 @@ func TestActiveReferenceValidation(t *testing.T) {
 	}
 }
 
+func TestPrivateAlertMayOmitInfo(t *testing.T) {
+	alert := validCAPCP(t)
+	alert.Scope = cap.ScopePrivate
+	alert.Addresses = "recipient@example.net"
+	alert.Info = nil
+	if report := capcp.Validate(alert); !report.Valid() {
+		t.Fatalf("private CAP-CP alert without info should be valid: %v", report)
+	}
+}
+
+func TestAutoTranslatedAppearsAtMostOncePerInfo(t *testing.T) {
+	alert := validCAPCP(t)
+	alert.Info[0].Parameters = []cap.ValuePair{
+		{ValueName: capcp.AutoTranslatedName, Value: "yes"},
+		{ValueName: capcp.AutoTranslatedName, Value: "no"},
+	}
+	assertRule(t, capcp.Validate(alert), "CAPCP-17")
+}
+
+func TestSenderMustIdentifyAnAgency(t *testing.T) {
+	alert := validCAPCP(t)
+	alert.Sender = "12345"
+	assertRule(t, capcp.Validate(alert), "CAPCP-11")
+}
+
+func TestGeometryRecommendation(t *testing.T) {
+	assertRule(t, capcp.Validate(validCAPCP(t)), "CAPCP-18")
+}
+
 func validCAPCP(t *testing.T) *cap.Alert {
 	t.Helper()
 	sent := mustDate(t, "2026-09-20T10:00:00+00:00")

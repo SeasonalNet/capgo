@@ -85,6 +85,7 @@ func TestNWSEASOriginatorFollowsEventCodeSignificance(t *testing.T) {
 	alert := validNWS(t)
 	alert.Info[0].Parameters = []cap.ValuePair{
 		{ValueName: nws.ParameterBlockChannel, Value: "NWEM"},
+		{ValueName: nws.ParameterBlockChannel, Value: "EAS"},
 		{ValueName: nws.ParameterVTEC, Value: "/O.CON.KLWX.CF.Y.0043.000000T0000Z-260921T1000Z/"},
 	}
 	alert.Info[0].EventCodes[1].Value = "CFY"
@@ -100,10 +101,12 @@ func TestNWSRequiredFieldsAndParameters(t *testing.T) {
 	alert := validNWS(t)
 	alert.Sender = "someone@example.org"
 	alert.Info[0].Onset = nil
+	alert.Info[0].Instruction = ""
 	alert.Info[0].Parameters = []cap.ValuePair{{ValueName: nws.ParameterBlockChannel, Value: "PUBLIC"}}
 	report := nws.Validate(alert)
 	assertRule(t, report, "NWS-SENDER")
 	assertRule(t, report, "NWS-ONSET")
+	assertRule(t, report, "NWS-INSTRUCTION")
 	assertRule(t, report, "NWS-EAS-ORG")
 	assertRule(t, report, "NWS-BLOCKCHANNEL")
 }
@@ -119,6 +122,37 @@ func TestNWSParameterFormats(t *testing.T) {
 	assertRule(t, report, "NWS-HAIL-SIZE")
 	assertRule(t, report, "NWS-TORNADO-DAMAGE")
 	assertRule(t, report, "NWS-EVENT-END")
+}
+
+func TestNWSRequiresArea(t *testing.T) {
+	alert := validNWS(t)
+	alert.Info[0].Areas = nil
+	assertRule(t, nws.Validate(alert), "NWS-AREA")
+}
+
+func TestNWSEventMotionRequiresNonzeroDirectionAndCanonicalSpeed(t *testing.T) {
+	alert := validNWS(t)
+	alert.Info[0].Parameters = append(alert.Info[0].Parameters,
+		cap.ValuePair{ValueName: nws.ParameterEventMotion, Value: "2026-09-20T10:00:00+00:00...storm...000DEG...01KT...10,20"},
+	)
+	assertRule(t, nws.Validate(alert), "NWS-EVENT-MOTION")
+
+	alert.Info[0].Parameters[len(alert.Info[0].Parameters)-1].Value = "2026-09-20T10:00:00+00:00...storm...001DEG...0KT...10,20"
+	assertNoRule(t, nws.Validate(alert), "NWS-EVENT-MOTION")
+}
+
+func TestNWSActiveReferences(t *testing.T) {
+	for _, msgType := range []cap.MsgType{cap.MsgTypeUpdate, cap.MsgTypeCancel} {
+		current := validNWS(t)
+		current.MsgType = msgType
+		prior := validNWS(t)
+		prior.Identifier = "prior-1"
+		assertRule(t, nws.ValidateActiveReferences(current, prior), "NWS-REFERENCES")
+		current.References = cap.FormatReferences([]cap.Reference{{Sender: prior.Sender, Identifier: prior.Identifier, Sent: prior.Sent}})
+		if report := nws.ValidateActiveReferences(current, prior); !report.Valid() {
+			t.Fatalf("unexpected %s reference error: %v", msgType, report)
+		}
+	}
 }
 
 func validNWS(t *testing.T) *cap.Alert {

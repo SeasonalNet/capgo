@@ -86,12 +86,35 @@ func (Validator) Name() string { return "NWS CAP v1.2" }
 // Validate applies the NWS and unconditional IPAWS rules.
 func Validate(alert *cap.Alert) cap.Report { return Validator{}.Validate(alert) }
 
+// ValidateActiveReferences checks that an NWS Update or Cancel names every
+// active related message supplied by the caller. CAP carries the references,
+// while the caller supplies the affected-message set from its history.
+func ValidateActiveReferences(current *cap.Alert, candidates ...*cap.Alert) cap.Report {
+	var report cap.Report
+	if current == nil {
+		report.Add(cap.LevelError, "NWS-REFERENCES", "/alert", "current alert is nil")
+		return report
+	}
+	if current.MsgType != cap.MsgTypeUpdate && current.MsgType != cap.MsgTypeCancel {
+		return report
+	}
+	missing, err := cap.MissingActiveReferences(current, candidates...)
+	if err != nil {
+		report.Add(cap.LevelError, "NWS-REFERENCES", "/alert/references", err.Error())
+		return report
+	}
+	for _, reference := range missing {
+		report.Add(cap.LevelError, "NWS-REFERENCES", "/alert/references", "active message is not referenced: "+reference.String())
+	}
+	return report
+}
+
 var (
 	threeLetterPattern  = regexp.MustCompile(`^[A-Z]{3}$`)
 	sameLocationPattern = regexp.MustCompile(`^\d{6}$`)
 	ugcPattern          = regexp.MustCompile(`^[A-Z]{2}[CZ](?:\d{3}|ALL)$`)
 	hailSizePattern     = regexp.MustCompile(`^\d+\.\d{2}$`)
-	eventMotionPattern  = regexp.MustCompile(`(?s)^(.{25})\.\.\.storm\.\.\.(\d{3})DEG\.\.\.(\d{1,2})KT\.\.\.(.+)$`)
+	eventMotionPattern  = regexp.MustCompile(`(?s)^(.{25})\.\.\.storm\.\.\.((?:00[1-9]|0[1-9]\d|[12]\d\d|3[0-5]\d))DEG\.\.\.(0|[1-9]\d?)KT\.\.\.(.+)$`)
 )
 
 func (validator Validator) Validate(alert *cap.Alert) cap.Report {
@@ -130,6 +153,9 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 		requireText(&report, "NWS-SENDERNAME", path+"/senderName", info.SenderName)
 		requireText(&report, "NWS-HEADLINE", path+"/headline", info.Headline)
 		requireText(&report, "NWS-DESCRIPTION", path+"/description", info.Description)
+		if info.Urgency != cap.UrgencyPast {
+			requireText(&report, "NWS-INSTRUCTION", path+"/instruction", info.Instruction)
+		}
 		requireText(&report, "NWS-WEB", path+"/web", info.Web)
 		if requiresEASOriginator(info.EventCodes) && !hasPair(info.Parameters, ParameterEASORG, "WXR") {
 			report.Add(cap.LevelError, "NWS-EAS-ORG", path+"/parameter", "EAS-ORG=WXR is required for NWS event codes with significance A (watch) or W (warning)")
@@ -137,8 +163,14 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 		if !hasPair(info.Parameters, ParameterBlockChannel, "NWEM") {
 			report.Add(cap.LevelError, "NWS-BLOCKCHANNEL", path+"/parameter", "NWS messages must block the NWEM channel")
 		}
+		if !requiresEASOriginator(info.EventCodes) && !hasPair(info.Parameters, ParameterBlockChannel, "EAS") {
+			report.Add(cap.LevelError, "NWS-BLOCKCHANNEL", path+"/parameter", "NWS messages not intended for EAS must block the EAS channel")
+		}
 		for parameterIndex, parameter := range info.Parameters {
 			validateParameter(&report, parameter, fmt.Sprintf("%s/parameter[%d]", path, parameterIndex+1))
+		}
+		if len(info.Areas) == 0 {
+			report.Add(cap.LevelError, "NWS-AREA", path+"/area", "at least one area block is required")
 		}
 		geocodes := make([]cap.ValuePair, 0)
 		for areaIndex := range info.Areas {

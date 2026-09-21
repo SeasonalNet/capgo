@@ -42,7 +42,7 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 	if !contains(alert.Codes, ProfileCode) {
 		report.Add(cap.LevelError, "CAPCP-03", "/alert/code", "CAP-CP profile code profile:CAP-CP:0.4 is required")
 	}
-	if (alert.MsgType == cap.MsgTypeAlert || alert.MsgType == cap.MsgTypeUpdate || alert.MsgType == cap.MsgTypeCancel) && len(alert.Info) == 0 {
+	if alert.Scope == cap.ScopePublic && (alert.MsgType == cap.MsgTypeAlert || alert.MsgType == cap.MsgTypeUpdate || alert.MsgType == cap.MsgTypeCancel) && len(alert.Info) == 0 {
 		report.Add(cap.LevelError, "CAPCP-05", "/alert/info", "public Alert, Update, and Cancel messages require an info block")
 	}
 
@@ -113,8 +113,12 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 			if !hasCAPCPLocation {
 				report.Add(cap.LevelError, "CAPCP-09", areaPath+"/geocode", "a CAP-CP Location References geocode is required")
 			}
+			if !validator.DisableRecommendations && len(area.Polygons) == 0 && len(area.Circles) == 0 {
+				report.Add(cap.LevelWarning, "CAPCP-18", areaPath, "polygon or circle geometry is recommended when available")
+			}
 		}
 
+		autoTranslatedCount := len(cap.Values(info.Parameters, AutoTranslatedName))
 		for parameterIndex, pair := range info.Parameters {
 			parameterPath := fmt.Sprintf("%s/parameter[%d]", path, parameterIndex+1)
 			switch pair.ValueName {
@@ -131,6 +135,9 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 					report.Add(cap.LevelError, "CAPCP-17", parameterPath+"/value", "AutoTranslated must be yes or no")
 				}
 			}
+		}
+		if autoTranslatedCount > 1 {
+			report.Add(cap.LevelError, "CAPCP-17", path+"/parameter", "AutoTranslated may appear at most once in an info block")
 		}
 
 		if !validator.DisableRecommendations {
@@ -152,7 +159,7 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 			}
 		}
 	}
-	if strings.IndexFunc(alert.Sender, unicode.IsLetter) < 0 && strings.IndexFunc(alert.Sender, unicode.IsDigit) < 0 {
+	if strings.IndexFunc(alert.Sender, unicode.IsLetter) < 0 {
 		report.Add(cap.LevelError, "CAPCP-11", "/alert/sender", "sender must be human-readable and identify the assembling agency")
 	}
 	return report
@@ -165,6 +172,9 @@ func ValidateActiveReferences(current *cap.Alert, candidates ...*cap.Alert) cap.
 	var report cap.Report
 	if current == nil {
 		report.Add(cap.LevelError, "CAPCP-12", "/alert", "current alert is nil")
+		return report
+	}
+	if current.MsgType != cap.MsgTypeUpdate && current.MsgType != cap.MsgTypeCancel {
 		return report
 	}
 	missing, err := cap.MissingActiveReferences(current, candidates...)
