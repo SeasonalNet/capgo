@@ -2,6 +2,8 @@
 package cli
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,17 +17,23 @@ import (
 	"git.seasonalnet.org/SeasonalNet/capgo/profiles/nws"
 )
 
-const schema = "git.seasonalnet.org/SeasonalNet/capgo/cli/v1"
+const validationSchema = "git.seasonalnet.org/SeasonalNet/capgo/validation/v1"
+const decodeSchema = "git.seasonalnet.org/SeasonalNet/capgo/decode/v1"
 
-// Run executes the capgo CLI and returns a process-style exit code. XML is
-// read from the optional positional path, or from stdin when the path is
-// omitted or is "-". Successful parsing always emits one JSON document on
-// stdout, including validation findings for invalid messages.
+// Run executes the capgo CLI and returns a process-style exit code. The
+// selected mode reads XML to validate/decode or JSON to encode from an
+// optional positional path, or from stdin when the path is omitted or is "-".
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("capgo", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	mode := flags.String("mode", "validate", "operation: validate XML, decode XML to JSON, or encode JSON as XML")
 	profile := flags.String("profile", "cap", "validation profile: cap, capcp, ipaws, or nws")
 	compact := flags.Bool("compact", false, "write compact JSON instead of indented JSON")
+	var ipawsChannels stringListFlag
+	flags.Var(&ipawsChannels, "ipaws-channel", "IPAWS destination channel (repeatable): capexch, public, eas, nwem, nwr, or cmas")
+	gubernatorial := flags.Bool("ipaws-gubernatorial", false, "enforce IPAWS gubernatorial EAS must-carry requirements")
+	capcpEventsPath := flags.String("capcp-event-codes", "", "file of governed CAP-CP event codes, one per line")
+	capcpLocationsPath := flags.String("capcp-location-codes", "", "file of governed CAP-CP location codes, one per line")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -33,8 +41,16 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "capgo: at most one input path is allowed")
 		return 2
 	}
+	if *mode != "validate" && *mode != "encode" && *mode != "decode" {
+		_, _ = fmt.Fprintf(stderr, "capgo: unknown mode %q (want validate, decode, or encode)\n", *mode)
+		return 2
+	}
+	if *mode == "encode" && *compact {
+		_, _ = fmt.Fprintln(stderr, "capgo: -compact applies only to JSON output modes")
+		return 2
+	}
 
-	validators, err := selectValidators(*profile)
+	validators, err := selectValidators(strings.ToLower(*profile), ipawsChannels, *gubernatorial, *capcpEventsPath, *capcpLocationsPath)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "capgo:", err)
 		return 2
@@ -52,21 +68,30 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		input = file
 	}
 
+	if *mode == "encode" {
+		return encodeJSON(input, stdout, stderr, validators)
+	}
 	alert, err := cap.Decode(input)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "capgo: decode:", err)
 		return 1
 	}
 	report := cap.ValidateWith(alert, validators...)
-	document := buildDocument(*profile, alert, report)
-
-	encoder := json.NewEncoder(stdout)
-	if !*compact {
-		encoder.SetIndent("", "  ")
+	if *mode == "decode" {
+		if !report.Valid() {
+			for _, issue := range report {
+				_, _ = fmt.Fprintln(stderr, issue)
+			}
+			return 1
+		}
+		output := decodeDocument{
+			Schema: decodeSchema, Profile: strings.ToLower(*profile), Alert: capMessageOutput(alertFromCAP(alert)),
+		}
+		return writeJSON(stdout, stderr, output, !*compact)
 	}
-	if err := encoder.Encode(document); err != nil {
-		_, _ = fmt.Fprintln(stderr, "capgo: encode output:", err)
-		return 1
+	document := buildDocument(*profile, alert, report)
+	if code := writeJSON(stdout, stderr, document, !*compact); code != 0 {
+		return code
 	}
 	if !report.Valid() {
 		for _, issue := range report {
@@ -77,19 +102,144 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func selectValidators(profile string) ([]cap.Validator, error) {
-	switch strings.ToLower(profile) {
+func writeJSON(stdout, stderr io.Writer, value any, indent bool) int {
+	encoder := json.NewEncoder(stdout)
+	if indent {
+		encoder.SetIndent("", "  ")
+	}
+	if err := encoder.Encode(value); err != nil {
+		_, _ = fmt.Fprintln(stderr, "capgo: encode output:", err)
+		return 1
+	}
+	return 0
+}
+
+func encodeJSON(input io.Reader, stdout, stderr io.Writer, validators []cap.Validator) int {
+	alert, err := decodeEncodeDocument(input)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "capgo: decode JSON:", err)
+		return 1
+	}
+	report := cap.ValidateWith(alert, validators...)
+	if !report.Valid() {
+		for _, issue := range report {
+			_, _ = fmt.Fprintln(stderr, issue)
+		}
+		return 1
+	}
+	var encoded bytes.Buffer
+	if err := cap.Encode(&encoded, alert); err != nil {
+		_, _ = fmt.Fprintln(stderr, "capgo: encode XML:", err)
+		return 1
+	}
+	decoded, err := cap.Decode(bytes.NewReader(encoded.Bytes()))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "capgo: generated XML failed CAP structure validation:", err)
+		return 1
+	}
+	if report := cap.Validate(decoded); !report.Valid() {
+		for _, issue := range report {
+			_, _ = fmt.Fprintln(stderr, "capgo: generated XML failed CAP validation:", issue)
+		}
+		return 1
+	}
+	if _, err := stdout.Write(encoded.Bytes()); err != nil {
+		_, _ = fmt.Fprintln(stderr, "capgo: write XML output:", err)
+		return 1
+	}
+	return 0
+}
+
+func selectValidators(profile string, channels []string, gubernatorial bool, eventsPath, locationsPath string) ([]cap.Validator, error) {
+	if profile != "ipaws" && (len(channels) != 0 || gubernatorial) {
+		return nil, fmt.Errorf("-ipaws-channel and -ipaws-gubernatorial require -profile ipaws")
+	}
+	if profile != "capcp" && (eventsPath != "" || locationsPath != "") {
+		return nil, fmt.Errorf("-capcp-event-codes and -capcp-location-codes require -profile capcp")
+	}
+	switch profile {
 	case "cap":
 		return nil, nil
 	case "capcp":
-		return []cap.Validator{capcp.Validator{}}, nil
+		validator := capcp.Validator{}
+		var err error
+		if eventsPath != "" {
+			validator.EventCodes, err = loadCodeList(eventsPath)
+			if err != nil {
+				return nil, fmt.Errorf("load CAP-CP event codes: %w", err)
+			}
+		}
+		if locationsPath != "" {
+			validator.LocationCodes, err = loadCodeList(locationsPath)
+			if err != nil {
+				return nil, fmt.Errorf("load CAP-CP location codes: %w", err)
+			}
+		}
+		return []cap.Validator{validator}, nil
 	case "ipaws":
-		return []cap.Validator{ipaws.Validator{}}, nil
+		selected := make([]ipaws.Channel, 0, len(channels))
+		for _, value := range channels {
+			channel, ok := map[string]ipaws.Channel{
+				"capexch": ipaws.ChannelCAPExchange, "public": ipaws.ChannelPublic,
+				"eas": ipaws.ChannelEAS, "nwem": ipaws.ChannelNWEM,
+				"nwr": ipaws.ChannelNWR, "cmas": ipaws.ChannelCMAS,
+			}[strings.ToLower(value)]
+			if !ok {
+				return nil, fmt.Errorf("unknown IPAWS channel %q", value)
+			}
+			selected = append(selected, channel)
+		}
+		if gubernatorial && !containsChannel(selected, ipaws.ChannelEAS) {
+			return nil, fmt.Errorf("-ipaws-gubernatorial requires -ipaws-channel eas")
+		}
+		return []cap.Validator{ipaws.Validator{Channels: selected, Gubernatorial: gubernatorial}}, nil
 	case "nws":
 		return []cap.Validator{nws.Validator{}}, nil
 	default:
 		return nil, fmt.Errorf("unknown profile %q", profile)
 	}
+}
+
+type stringListFlag []string
+
+func (values *stringListFlag) String() string { return strings.Join(*values, ",") }
+
+func (values *stringListFlag) Set(value string) error {
+	*values = append(*values, value)
+	return nil
+}
+
+func containsChannel(channels []ipaws.Channel, expected ipaws.Channel) bool {
+	for _, channel := range channels {
+		if channel == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func loadCodeList(path string) (map[string]struct{}, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	codes := make(map[string]struct{})
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		code := strings.TrimSpace(scanner.Text())
+		if code == "" || strings.HasPrefix(code, "#") {
+			continue
+		}
+		codes[code] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	if len(codes) == 0 {
+		return nil, fmt.Errorf("%s contains no codes", path)
+	}
+	return codes, nil
 }
 
 type document struct {
@@ -100,6 +250,16 @@ type document struct {
 	Actions []actionOutput `json:"actions"`
 	Issues  []issueOutput  `json:"issues"`
 }
+
+type decodeDocument struct {
+	Schema  string           `json:"schema"`
+	Profile string           `json:"profile"`
+	Alert   capMessageOutput `json:"alert"`
+}
+
+// capMessageOutput has the same fields as the encode request while keeping
+// the decoder's typed output contract distinct from its input DTO.
+type capMessageOutput encodeAlert
 
 type alertOutput struct {
 	Identifier  string      `json:"identifier"`
@@ -168,7 +328,7 @@ type issueOutput struct {
 
 func buildDocument(profile string, alert *cap.Alert, report cap.Report) document {
 	document := document{
-		Schema:  schema,
+		Schema:  validationSchema,
 		Profile: strings.ToLower(profile),
 		Valid:   report.Valid(),
 		Alert: alertOutput{

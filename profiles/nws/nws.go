@@ -157,13 +157,13 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 			requireText(&report, "NWS-INSTRUCTION", path+"/instruction", info.Instruction)
 		}
 		requireText(&report, "NWS-WEB", path+"/web", info.Web)
-		if requiresEASOriginator(info.EventCodes) && !hasPair(info.Parameters, ParameterEASORG, "WXR") {
+		if isEASEvent(info.EventCodes) && !hasPair(info.Parameters, ParameterEASORG, "WXR") {
 			report.Add(cap.LevelError, "NWS-EAS-ORG", path+"/parameter", "EAS-ORG=WXR is required for NWS event codes with significance A (watch) or W (warning)")
 		}
 		if !hasPair(info.Parameters, ParameterBlockChannel, "NWEM") {
 			report.Add(cap.LevelError, "NWS-BLOCKCHANNEL", path+"/parameter", "NWS messages must block the NWEM channel")
 		}
-		if !requiresEASOriginator(info.EventCodes) && !hasPair(info.Parameters, ParameterBlockChannel, "EAS") {
+		if !isEASEvent(info.EventCodes) && !hasPair(info.Parameters, ParameterBlockChannel, "EAS") {
 			report.Add(cap.LevelError, "NWS-BLOCKCHANNEL", path+"/parameter", "NWS messages not intended for EAS must block the EAS channel")
 		}
 		for parameterIndex, parameter := range info.Parameters {
@@ -181,12 +181,12 @@ func (validator Validator) Validate(alert *cap.Alert) cap.Report {
 	return report
 }
 
-// requiresEASOriginator follows the NWS CAP representation: the final
-// character of the NationalWeatherService event code is the product
-// significance (for example, FAA/FFA/FLA are watches and CFY is an
-// advisory). This intentionally does not depend on the optional VTEC
-// parameter, which NWS is considering discontinuing.
-func requiresEASOriginator(eventCodes []cap.ValuePair) bool {
+// isEASEvent follows the NWS CAP representation: the final character of the
+// NationalWeatherService event code is the product significance. A (watch)
+// and W (warning) products can activate EAS and require EAS-ORG=WXR. It
+// intentionally does not depend on the optional VTEC parameter, which NWS is
+// considering discontinuing.
+func isEASEvent(eventCodes []cap.ValuePair) bool {
 	values := cap.Values(eventCodes, EventCodeNWS)
 	if len(values) != 1 || len(values[0]) != 3 {
 		return true

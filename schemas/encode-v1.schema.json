@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://git.seasonalnet.org/SeasonalNet/capgo/schemas/encode-v1.schema.json",
+  "title": "capgo CAP message encoding request v1",
+  "description": "Versioned JSON authoring contract accepted by capgo -mode encode. The selected validation profile is supplied with -profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "alert"],
+  "properties": {
+    "schema": {
+      "const": "git.seasonalnet.org/SeasonalNet/capgo/encode/v1"
+    },
+    "alert": {
+      "$ref": "#/$defs/alert"
+    }
+  },
+  "$defs": {
+    "dateTime": {
+      "type": "string",
+      "description": "CAP 1.2 date-time with whole seconds and an explicit numeric UTC offset; Z and fractional seconds are not accepted.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}[+-](?:(?:0\\d|1[0-3]):[0-5]\\d|14:00)$"
+    },
+    "valuePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_name", "value"],
+      "properties": {
+        "value_name": {"type": "string"},
+        "value": {"type": "string"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "mime_type"],
+      "properties": {
+        "description": {"type": "string"},
+        "mime_type": {"type": "string"},
+        "size": {"type": "integer", "minimum": 0},
+        "uri": {"type": "string"},
+        "deref_uri": {"type": "string"},
+        "digest": {"type": "string"}
+      }
+    },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "properties": {
+        "description": {"type": "string"},
+        "polygons": {"type": "array", "items": {"type": "string"}},
+        "circles": {"type": "array", "items": {"type": "string"}},
+        "geocodes": {"type": "array", "items": {"$ref": "#/$defs/valuePair"}},
+        "altitude": {"type": "number"},
+        "ceiling": {"type": "number"}
+      }
+    },
+    "info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "event", "urgency", "severity", "certainty"],
+      "properties": {
+        "language": {"type": "string"},
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["Geo", "Met", "Safety", "Security", "Rescue", "Fire", "Health", "Env", "Transport", "Infra", "CBRNE", "Other"]}
+        },
+        "event": {"type": "string"},
+        "response_types": {
+          "type": "array",
+          "items": {"enum": ["Shelter", "Evacuate", "Prepare", "Execute", "Avoid", "Monitor", "Assess", "AllClear", "None"]}
+        },
+        "urgency": {"enum": ["Immediate", "Expected", "Future", "Past", "Unknown"]},
+        "severity": {"enum": ["Extreme", "Severe", "Moderate", "Minor", "Unknown"]},
+        "certainty": {"enum": ["Observed", "Likely", "Possible", "Unlikely", "Unknown"]},
+        "audience": {"type": "string"},
+        "event_codes": {"type": "array", "items": {"$ref": "#/$defs/valuePair"}},
+        "effective": {"$ref": "#/$defs/dateTime"},
+        "onset": {"$ref": "#/$defs/dateTime"},
+        "expires": {"$ref": "#/$defs/dateTime"},
+        "sender_name": {"type": "string"},
+        "headline": {"type": "string"},
+        "description": {"type": "string"},
+        "instruction": {"type": "string"},
+        "web": {"type": "string"},
+        "contact": {"type": "string"},
+        "parameters": {"type": "array", "items": {"$ref": "#/$defs/valuePair"}},
+        "resources": {"type": "array", "items": {"$ref": "#/$defs/resource"}},
+        "areas": {"type": "array", "items": {"$ref": "#/$defs/area"}}
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "namespace": {"type": "string"},
+        "name": {"type": "string", "minLength": 1},
+        "value": {"type": "string"}
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "attributes": {"type": "array", "items": {"$ref": "#/$defs/attribute"}},
+        "inner_xml": {"type": "string", "description": "Well-formed XML child content. capgo validates XML syntax but does not create or verify XML signatures."}
+      }
+    },
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "sender", "sent", "status", "msg_type", "scope"],
+      "properties": {
+        "identifier": {"type": "string", "minLength": 1},
+        "sender": {"type": "string", "minLength": 1},
+        "sent": {"$ref": "#/$defs/dateTime"},
+        "status": {"enum": ["Actual", "Exercise", "System", "Test", "Draft"]},
+        "msg_type": {"enum": ["Alert", "Update", "Cancel", "Ack", "Error"]},
+        "source": {"type": "string"},
+        "scope": {"enum": ["Public", "Restricted", "Private"]},
+        "restriction": {"type": "string"},
+        "addresses": {"type": "string"},
+        "codes": {"type": "array", "items": {"type": "string"}},
+        "note": {"type": "string"},
+        "references": {"type": "string"},
+        "incidents": {"type": "string"},
+        "info": {"type": "array", "items": {"$ref": "#/$defs/info"}},
+        "extensions": {"type": "array", "items": {"$ref": "#/$defs/extension"}}
+      }
+    }
+  }
+}

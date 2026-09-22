@@ -1,13 +1,13 @@
 # capgo
 
-`capgo` is a dependency-free Go library for the XML representation of OASIS Common Alerting Protocol (CAP) version 1.2. It includes composable validators for the Canadian CAP Profile (CAP-CP), the IPAWS CAP profile, and the National Weather Service CAP producer profile.
+`capgo` is a dependency-free Go library for the XML representation of OASIS Common Alerting Protocol (CAP) version 1.2. It includes composable validators, encoders, and decoders for the Canadian CAP Profile (CAP-CP), the IPAWS CAP profile, and the National Weather Service CAP producer profile.
 
 - The primary repository is [on SeasonalForge](https://git.seasonalnet.org/SeasonalNet/capgo).
 - The repository [on GitHub](https://github.com/SeasonalNet/capgo) is a mirror.
 
 ## What is included
 
-- The complete CAP 1.2 XML object model: `alert`, `info`, `resource`, `area`, event codes, parameters, geocodes, and XML Digital Signature extension preservation.
+- The complete CAPv1.2 XML object model.
 - Strict XML structure and ordering checks matching the CAP 1.2 XSD.
 - Semantic checks from the CAP 1.2 data dictionary, including lifecycle references, scope-dependent fields, date-times, resources, and WGS 84 polygons/circles.
 - Bounded, DTD-free decoding for untrusted alert feeds.
@@ -15,6 +15,7 @@
 - CAP-CP Beta 0.4A validation, optional exact managed-list validation, and active-message reference-chain checking.
 - IPAWS 1.0 validation with guide-backed EAS, NWEM/NWR, CMAS/WEA, and gubernatorial must-carry rules.
 - NWS CAP v1.2 producer validation and NWS parameter checks.
+- Encoders, decoders, and validators for standard CAPv1.2, CAP-CP, NWS CAP, and IPAWS CAP.
 - No third-party or C dependencies.
 
 ## Install
@@ -22,8 +23,6 @@
 ```sh
 go get git.seasonalnet.org/SeasonalNet/capgo
 ```
-
-The module path is ready for that repository location; change `module` in `go.mod` before publishing elsewhere.
 
 ## Development
 
@@ -98,6 +97,79 @@ Construct messages with the exported types and constants, then call `cap.Validat
 
 ## Command-line application
 
+The default `validate` mode reads CAP XML and writes a validation report. Use
+`-mode decode` to emit the complete typed message as JSON, or `-mode encode`
+to read a CAP message as JSON, validate it under the selected profile, and
+write CAP XML to standard output:
+
+```sh
+cat alert.xml | go run ./cmd/capgo -mode decode -profile capcp
+go run ./cmd/capgo -mode decode -profile nws -compact alert.xml
+cat alert.json | go run ./cmd/capgo -mode encode -profile capcp
+go run ./cmd/capgo -mode encode -profile nws alert.json > alert.xml
+```
+
+Decode mode emits JSON only when the XML is valid CAP 1.2 and passes the
+selected profile. It preserves the full typed CAP message, including ordered
+value pairs, resources, areas, and XML extensions. It does not repair or
+normalize invalid input. Its output contract is
+[`schemas/decode-v1.schema.json`](schemas/decode-v1.schema.json).
+
+Encode mode accepts the independent, versioned request schema in
+[`schemas/encode-v1.schema.json`](schemas/encode-v1.schema.json). The request
+uses `schema` and `alert` at its root; `-profile` selects which profile
+validator runs. Repeated CAP values are ordered arrays. For example:
+
+```json
+{
+  "schema": "git.seasonalnet.org/SeasonalNet/capgo/encode/v1",
+  "alert": {
+    "identifier": "example-1",
+    "sender": "alerts.example.org",
+    "sent": "2026-09-20T18:00:00-04:00",
+    "status": "Actual",
+    "msg_type": "Alert",
+    "scope": "Public",
+    "codes": ["profile:CAP-CP:0.4"],
+    "info": [{
+      "language": "en-CA",
+      "categories": ["Safety"],
+      "event": "Example Warning",
+      "response_types": ["Monitor"],
+      "urgency": "Expected",
+      "severity": "Moderate",
+      "certainty": "Likely",
+      "event_codes": [{"value_name": "profile:CAP-CP:Event:en-CA", "value": "example"}],
+      "areas": [{
+        "description": "Example area",
+        "geocodes": [{"value_name": "profile:CAP-CP:Location:0.4", "value": "3506"}]
+      }]
+    }]
+  }
+}
+```
+
+Unknown JSON fields and multiple top-level JSON values are rejected. Profile
+validation errors are written to standard error and prevent XML output.
+Generated XML is reparsed and checked against CAP validation before it is
+written to standard output.
+
+For channel-specific IPAWS validation, select one or more destination channels
+with repeatable `-ipaws-channel` flags. Use `-ipaws-gubernatorial` with the EAS
+channel when the must-carry rule applies. CAP-CP Event References and Location
+References are separately versioned, so their governed values can be supplied
+as newline-delimited files with `-capcp-event-codes` and
+`-capcp-location-codes`; blank lines and `#` comments are ignored. For example:
+
+```sh
+go run ./cmd/capgo -mode encode -profile ipaws -ipaws-channel eas alert.json
+go run ./cmd/capgo -mode encode -profile capcp \
+  -capcp-event-codes events.txt -capcp-location-codes locations.txt alert.json
+```
+
+History-aware Update/Cancel checks require the related prior messages and are
+available through the library's `ValidateActiveReferences` APIs.
+
 ```sh
 go run ./cmd/capgo -profile cap testdata/oasis-example.xml
 cat message.xml | go run ./cmd/capgo -profile capcp
@@ -105,13 +177,14 @@ cat message.xml | go run ./cmd/capgo -profile ipaws -compact
 go run ./cmd/capgo -profile nws message.xml
 ```
 
-The command accepts one XML path or reads XML from standard input when the
-path is omitted (or `-`). It writes one JSON document to standard output. The
-document contains the normalized alert metadata, one actionable object for
+In `validate` mode, the command accepts one XML path or reads XML from
+standard input when the path is omitted (or `-`). It writes one JSON document
+to standard output with normalized alert metadata, one actionable object for
 each `info` block, and structured validation issues. A message with
 error-level findings still produces JSON and exits non-zero; diagnostics are
 also written to standard error. The `examples/validate` command remains as a
-compatibility wrapper around the same application.
+compatibility wrapper around the same application. The validation JSON
+contract is [`schemas/validation-v1.schema.json`](schemas/validation-v1.schema.json).
 
 See [docs/examples](docs/examples/README.md) for native Go usage and Python,
 Node.js, Java, C++, Rust, C#/.NET, and shell integrations.

@@ -12,11 +12,11 @@ go build -o ./bin/capgo ./cmd/capgo
 export CAPGO_BIN="$PWD/bin/capgo"
 ```
 
-The command accepts one XML path, or reads one CAP document from standard input when no path is supplied. It writes one JSON document to standard output. The JSON envelope has this stable shape:
+In `validate` mode, the command accepts one XML path, or reads one CAP document from standard input when no path is supplied. It writes one JSON validation report to standard output. The JSON envelope has this stable shape:
 
 ```json
 {
-  "schema": "git.seasonalnet.org/SeasonalNet/capgo/cli/v1",
+  "schema": "git.seasonalnet.org/SeasonalNet/capgo/validation/v1",
   "profile": "nws",
   "valid": true,
   "alert": { "identifier": "...", "sender": "..." },
@@ -27,12 +27,19 @@ The command accepts one XML path, or reads one CAP document from standard input 
 }
 ```
 
-`valid` is false when error-level findings exist. A decoded message still produces JSON when validation fails, and the process exits with status 1; diagnostics are also written to standard error. Malformed or unsafe XML also exits 1. Use `-compact` when a single-line document is preferred.
+`valid` is false when error-level findings exist. Validation mode still produces its report when profile validation fails and exits with status 1; diagnostics are also written to standard error. Malformed or unsafe XML also exits 1. Use `-compact` when a single-line document is preferred.
 
 Supported profiles are `cap`, `capcp`, `ipaws`, and `nws`:
 
 ```sh
 "$CAPGO_BIN" -profile nws -compact < alert.xml
+```
+
+Raw decode mode emits the complete typed message only when the selected
+profile passes validation:
+
+```sh
+"$CAPGO_BIN" -mode decode -profile nws < alert.xml
 ```
 
 The native Go API is required when an application needs channel-specific IPAWS validation or history-aware reference checks. The CLI examples below cover profile parsing and structured output.

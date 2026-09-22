@@ -1,4 +1,4 @@
-// Command capgo reads a CAP XML message and emits machine-readable JSON.
+// Command capgo validates CAP XML or encodes a JSON CAP message as XML.
 package main
 
 import (

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://git.seasonalnet.org/SeasonalNet/capgo/schemas/validation-v1.schema.json",
+  "title": "capgo CAP validation output v1",
+  "description": "Normalized CAP metadata, actionable information blocks, and profile validation findings emitted by capgo -mode validate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "profile", "valid", "alert", "actions", "issues"],
+  "properties": {
+    "schema": {
+      "const": "git.seasonalnet.org/SeasonalNet/capgo/validation/v1"
+    },
+    "profile": {
+      "enum": ["cap", "capcp", "ipaws", "nws"]
+    },
+    "valid": {"type": "boolean"},
+    "alert": {"$ref": "#/$defs/alert"},
+    "actions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/action"}
+    },
+    "issues": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/issue"}
+    }
+  },
+  "$defs": {
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "sender", "sent", "status", "msg_type", "scope"],
+      "properties": {
+        "identifier": {"type": "string"},
+        "sender": {"type": "string"},
+        "sent": {"$ref": "#/$defs/dateTime"},
+        "status": {"type": "string"},
+        "msg_type": {"type": "string"},
+        "source": {"type": "string"},
+        "scope": {"type": "string"},
+        "restriction": {"type": "string"},
+        "addresses": {"type": "array", "items": {"type": "string"}},
+        "codes": {"type": "array", "items": {"type": "string"}},
+        "note": {"type": "string"},
+        "references": {"type": "string"},
+        "incidents": {"type": "string"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "event", "categories", "urgency", "severity", "certainty", "effective"],
+      "properties": {
+        "language": {"type": "string"},
+        "event": {"type": "string"},
+        "categories": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "response_types": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "urgency": {"type": "string"},
+        "severity": {"type": "string"},
+        "certainty": {"type": "string"},
+        "audience": {"type": "string"},
+        "effective": {"type": "string"},
+        "onset": {"type": "string"},
+        "expires": {"type": "string"},
+        "sender_name": {"type": "string"},
+        "headline": {"type": "string"},
+        "description": {"type": "string"},
+        "instruction": {"type": "string"},
+        "web": {"type": "string"},
+        "contact": {"type": "string"},
+        "event_codes": {"$ref": "#/$defs/pairMap"},
+        "parameters": {"$ref": "#/$defs/pairMap"},
+        "areas": {"type": "array", "items": {"$ref": "#/$defs/area"}},
+        "resources": {"type": "array", "items": {"$ref": "#/$defs/resource"}}
+      }
+    },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "properties": {
+        "description": {"type": "string"},
+        "polygons": {"type": "array", "items": {"type": "string"}},
+        "circles": {"type": "array", "items": {"type": "string"}},
+        "geocodes": {"$ref": "#/$defs/pairMap"},
+        "altitude": {"type": "number"},
+        "ceiling": {"type": "number"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "mime_type"],
+      "properties": {
+        "description": {"type": "string"},
+        "mime_type": {"type": "string"},
+        "size": {"type": "integer", "minimum": 0},
+        "uri": {"type": "string"},
+        "deref_uri": {"type": "string"},
+        "digest": {"type": "string"}
+      }
+    },
+    "pairMap": {
+      "type": "object",
+      "additionalProperties": {"type": "array", "items": {"type": "string"}}
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "rule", "path", "message"],
+      "properties": {
+        "level": {"type": "string"},
+        "rule": {"type": "string"},
+        "path": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    },
+    "dateTime": {"type": "string"}
+  }
+}
