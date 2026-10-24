@@ -24,6 +24,12 @@
 go get git.seasonalnet.org/SeasonalNet/capgo
 ```
 
+## Versioning
+
+Go module releases are versioned by `vMAJOR.MINOR.PATCH` Git tags. Go resolves
+the module version from those repository tags; the library does not maintain a
+separate release-version constant or file.
+
 ## Development
 
 The repository targets Go 1.27.3, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
