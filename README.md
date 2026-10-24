@@ -26,7 +26,7 @@ go get git.seasonalnet.org/SeasonalNet/capgo
 
 ## Development
 
-The repository targets Go 1.26.5, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
+The repository targets Go 1.27.3, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
 
 ## Decode and validate
 
