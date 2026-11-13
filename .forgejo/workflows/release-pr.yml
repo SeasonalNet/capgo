@@ -1,0 +1,29 @@
+# managed-by: brel
+name: Release PR
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-pr:
+    if: forgejo.event_name != 'pull_request'
+    runs-on: docker
+    container:
+      image: rust:latest
+    steps:
+      - name: Checkout
+        uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ forgejo.token }}
+
+      - name: Install brel
+        run: cargo install brel --version 0.13.0 --locked
+
+      - name: Generate release PR
+        env:
+          BREL_FORGEJO_TOKEN: ${{ forgejo.token }}
+        run: brel release-pr

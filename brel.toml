@@ -1,0 +1,11 @@
+provider = "forgejo"
+default_branch = "main"
+
+[release_pr.changelog]
+enabled = false
+
+[release_pr.tagging]
+enabled = false
+tag_template = "v{version}"
+
+[release_pr.version_updates]
