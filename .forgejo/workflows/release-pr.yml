@@ -13,17 +13,24 @@ jobs:
     runs-on: docker
     container:
       image: rust:latest
+
     steps:
+      - name: Install Node.js
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs
+          rm -rf /var/lib/apt/lists/*
+
       - name: Checkout
         uses: https://code.forgejo.org/actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ forgejo.token }}
+          token: ${{ secrets.BREL_FORGEJO_TOKEN }}
 
       - name: Install brel
         run: cargo install brel --version 0.13.0 --locked
 
       - name: Generate release PR
         env:
-          BREL_FORGEJO_TOKEN: ${{ forgejo.token }}
+          BREL_FORGEJO_TOKEN: ${{ secrets.BREL_FORGEJO_TOKEN }}
         run: brel release-pr
