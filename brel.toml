@@ -9,3 +9,4 @@ enabled = false
 tag_template = "v{version}"
 
 [release_pr.version_updates]
+"release.toml" = ["version"]
