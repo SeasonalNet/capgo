@@ -1,4 +1,4 @@
 [tools]
-go = "1.27.3"
+go = "1.27.4"
 golangci-lint = "v2.15.0"
 gitleaks = "8.30.1"

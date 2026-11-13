@@ -32,7 +32,7 @@ separate release-version constant or file.
 
 ## Development
 
-The repository targets Go 1.27.3, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
+The repository targets Go 1.27.4, pinned in `go.mod`, `mise.toml`, and both CI workflow definitions. Use `mise exec -- make check` for the repository quality gate.
 
 ## Decode and validate
 

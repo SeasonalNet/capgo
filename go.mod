@@ -1,3 +1,3 @@
 module git.seasonalnet.org/SeasonalNet/capgo
 
-go 1.27.3
+go 1.27.4
